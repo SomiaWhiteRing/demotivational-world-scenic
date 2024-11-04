@@ -1,0 +1,179 @@
+:root {
+  --primary: #d4b168;
+  --bg-dark: #1a1814;
+  --text-light: #f0e6d6;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg-dark);
+  color: var(--text-light);
+  font-family: "游明朝", YuMincho, "Hiragino Mincho ProN W3",
+    "ヒラギノ明朝 ProN W3", "Hiragino Mincho ProN", "HG明朝E", "ＭＳ Ｐ明朝",
+    "ＭＳ 明朝", serif;
+}
+
+header {
+  position: fixed;
+  top: 0;
+  width: 100%;
+  background: rgba(26, 24, 20, 0.95);
+  padding: 1rem;
+  z-index: 1000;
+  border-bottom: 1px solid var(--primary);
+}
+
+h1 {
+  color: var(--primary);
+  text-align: center;
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.period-nav {
+  width: 100%;
+  overflow: hidden;
+}
+
+.nav-scroll {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding: 0.5rem;
+  gap: 1rem;
+  justify-content: center;
+  max-width: 100%;
+}
+
+.nav-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.period-btn {
+  background: transparent;
+  border: 1px solid var(--primary);
+  color: var(--primary);
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.period-btn:hover,
+.period-btn.active {
+  background: var(--primary);
+  color: var(--bg-dark);
+}
+
+.description {
+  margin-top: 120px;
+  padding: 1rem;
+  white-space: pre-wrap;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(-20px);
+  transition: all 0.3s ease;
+}
+
+.description.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.gallery {
+  padding: 1rem;
+  position: relative;
+  margin-top: 1rem;
+  width: calc(100% - 3rem);
+}
+
+.gallery-item {
+  position: absolute;
+  width: calc(16.666% - 1rem);
+  opacity: 0;
+  transform: scale(0.9);
+  transition: all 0.3s ease;
+}
+
+.gallery-item .title {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(26, 24, 20, 0.8);
+  color: var(--text-light);
+  padding: 0.5rem;
+  font-size: 0.9rem;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  transform-origin: bottom;
+}
+
+.gallery-item:hover .title {
+  opacity: 1;
+}
+
+.gallery-item.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.gallery-item img {
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(212, 177, 104, 0.3);
+  transition: all 0.3s ease;
+  display: block;
+}
+
+.gallery-item:hover img,
+.gallery-item:hover .title {
+  border-color: var(--primary);
+}
+
+.gallery-item:hover {
+  transform: scale(1.02);
+}
+
+@media (max-width: 2000px) {
+  .gallery-item {
+    width: calc(20% - 1rem);
+  }
+}
+
+@media (max-width: 1600px) {
+  .gallery-item {
+    width: calc(25% - 1rem);
+  }
+}
+
+@media (max-width: 1200px) {
+  .gallery-item {
+    width: calc(33.333% - 1rem);
+  }
+}
+
+@media (max-width: 800px) {
+  .gallery-item {
+    width: calc(50% - 1rem);
+  }
+}
+
+@media (max-width: 480px) {
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  .description {
+    margin-top: 100px;
+    font-size: 0.9rem;
+  }
+}
