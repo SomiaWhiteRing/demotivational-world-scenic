@@ -92,15 +92,12 @@ h1 {
   padding: 1rem;
   position: relative;
   margin-top: 1rem;
-  width: calc(100% - 3rem);
+  width: 100%;
 }
 
 .gallery-item {
   position: absolute;
-  width: calc(16.666% - 1rem);
-  opacity: 0;
-  transform: scale(0.9);
-  transition: all 0.3s ease;
+  transition: transform 0.3s ease-out;
 }
 
 .gallery-item .title {
@@ -128,10 +125,8 @@ h1 {
 
 .gallery-item img {
   width: 100%;
-  height: auto;
-  border: 1px solid rgba(212, 177, 104, 0.3);
-  transition: all 0.3s ease;
-  display: block;
+  height: 100%;
+  object-fit: cover;
 }
 
 .gallery-item:hover img,
@@ -182,7 +177,7 @@ h1 {
   position: absolute;
   top: 0;
   left: 0;
-  right: -3rem;
+  right: 0;
   bottom: 0;
   background: rgba(26, 24, 20, 0.8);
   display: flex;
@@ -213,3 +208,4 @@ h1 {
     transform: rotate(360deg);
   }
 }
+

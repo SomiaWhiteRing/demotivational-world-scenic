@@ -120,7 +120,13 @@ function displayImages(period) {
     const positions = [];
 
     items.forEach((item) => {
-      const displayHeight = (item.height / item.width) * columnWidth;
+      // 计算实际显示尺寸，保持宽高比
+      let displayHeight = (item.height / item.width) * columnWidth;
+      const displayWidth = columnWidth;  // 保持列宽一致
+
+      // 添加最小高度限制：列数 * 50
+      const minHeight = columns * 50;
+      displayHeight = Math.max(displayHeight, minHeight);
 
       let shortestColumn = 0;
       let shortestHeight = columnHeights[0];
@@ -135,7 +141,10 @@ function displayImages(period) {
       const y = columnHeights[shortestColumn];
 
       positions.push({
-        x, y, width: columnWidth, height: displayHeight
+        x,
+        y,
+        width: displayWidth,
+        height: displayHeight  // 使用添加了最小高度限制的显示高度
       });
 
       columnHeights[shortestColumn] += displayHeight + gap;
@@ -186,7 +195,37 @@ function displayImages(period) {
       loadingMask.classList.add('visible');
 
       const loadedImages = await loadImages();
-      const containerWidth = gallery.clientWidth;
+      const remSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+      // 如果当前是pc端，还要减去滚动条宽度
+      const getScrollBarWidth = () => {
+        // 创建外层容器
+        const outer = document.createElement('div');
+        outer.style.cssText = `
+          visibility: hidden;
+          overflow: scroll;
+          position: absolute;
+          top: -9999px;
+          width: 100px;
+          height: 100px;
+        `;
+
+        // 创建内层容器
+        const inner = document.createElement('div');
+        inner.style.width = '100%';
+        outer.appendChild(inner);
+
+        // 添加到 DOM 并计算
+        document.body.appendChild(outer);
+        const scrollBarWidth = outer.offsetWidth - inner.offsetWidth;
+
+        // 清理 DOM
+        outer.remove();
+
+        return scrollBarWidth;
+      };
+
+      const scrollbarWidth = getScrollBarWidth();
+      const containerWidth = gallery.clientWidth - remSize * 2 - scrollbarWidth;
 
       // 添加图片容器，但保持遮罩层和高度
       gallery.style.height = '300px';
@@ -206,9 +245,10 @@ function displayImages(period) {
           <div class="title">${image.title}</div>
         `;
 
-        // 设置位置
+        // 设置位置和尺寸
         item.style.transform = `translate(${positions[index].x}px, ${positions[index].y}px)`;
         item.style.width = `${positions[index].width}px`;
+        item.style.height = `${positions[index].height}px`;
 
         gallery.appendChild(item);
 
