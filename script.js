@@ -16,7 +16,16 @@ async function loadData() {
 function displayImages(period) {
   const gallery = document.querySelector('.gallery');
   const description = document.querySelector('.description');
-  gallery.innerHTML = '';
+
+  // 首先清空gallery、重设高度并添加加载遮罩
+  gallery.style.height = '300px';
+  gallery.innerHTML = `
+    <div class="loading-mask visible">
+      <div class="loading-spinner"></div>
+    </div>
+  `;
+
+  const loadingMask = gallery.querySelector('.loading-mask');
 
   let images = [];
 
@@ -55,29 +64,66 @@ function displayImages(period) {
     return Promise.all(imagePromises);
   }
 
-  // 计算瀑布流布局
+  // 添加缓存对象
+  const layoutCache = {};
+
+  // 修改 calculateLayout 函数
   function calculateLayout(items, containerWidth) {
-    const gap = 16; // 1rem的间距
-    let columns = 6; // 默认最大6列
-
     // 根据容器宽度确定列数
-    if (containerWidth <= 800) columns = 2;
-    else if (containerWidth <= 1200) columns = 3;
-    else if (containerWidth <= 1600) columns = 4;
-    else if (containerWidth <= 2000) columns = 5;
+    let columns;
+    if (containerWidth <= 800) {
+      columns = 2;
+    } else if (containerWidth <= 1200) {
+      columns = 3;
+    } else if (containerWidth <= 1600) {
+      columns = 4;
+    } else if (containerWidth <= 2000) {
+      columns = 5;
+    } else {
+      columns = 6;
+    }
 
-    const columnWidth = (containerWidth - (gap * (columns - 1))) / columns;
+    // 生成基于列数的缓存键
+    const cacheKey = `layout_${columns}_${items.length}_${JSON.stringify(items.map(item => ({
+      width: item.width,
+      height: item.height
+    })))}`;
+
+    // 尝试从 localStorage 获取缓存
+    try {
+      const cachedLayout = localStorage.getItem(cacheKey);
+      if (cachedLayout) {
+        const { positions, containerHeight } = JSON.parse(cachedLayout);
+
+        // 根据当前容器宽度调整缓存的位置
+        const scale = containerWidth / positions.referenceWidth;
+        const scaledPositions = positions.items.map(pos => ({
+          x: pos.x * scale,
+          y: pos.y * scale,
+          width: pos.width * scale,
+          height: pos.height * scale
+        }));
+
+        gallery.style.height = `${containerHeight * scale}px`;
+        return scaledPositions;
+      }
+    } catch (error) {
+      console.warn('读取布局缓存失败:', error);
+    }
+
+    const gap = 16;
+    // 计算基准宽度（用于存储缓存）
+    const referenceWidth = columns * 400; // 假设每列基准宽度为400px
+    const columnWidth = (referenceWidth - (gap * (columns - 1))) / columns;
+
     const columnHeights = new Array(columns).fill(0);
     const positions = [];
 
-    items.forEach((item, index) => {
-      // 计算图片显示高度
+    items.forEach((item) => {
       const displayHeight = (item.height / item.width) * columnWidth;
 
-      // 找出最短的列
       let shortestColumn = 0;
       let shortestHeight = columnHeights[0];
-
       for (let i = 1; i < columns; i++) {
         if (columnHeights[i] < shortestHeight) {
           shortestColumn = i;
@@ -85,64 +131,105 @@ function displayImages(period) {
         }
       }
 
-      // 计算位置
       const x = shortestColumn * (columnWidth + gap);
       const y = columnHeights[shortestColumn];
 
       positions.push({
-        x,
-        y,
-        width: columnWidth,
-        height: displayHeight
+        x, y, width: columnWidth, height: displayHeight
       });
 
-      // 更新列高度
       columnHeights[shortestColumn] += displayHeight + gap;
     });
 
-    // 设置容器高度
     const maxHeight = Math.max(...columnHeights);
-    gallery.style.height = `${maxHeight}px`;
 
-    return positions;
+    // 存储到 localStorage
+    try {
+      const layoutData = {
+        positions: {
+          referenceWidth,
+          items: positions
+        },
+        containerHeight: maxHeight
+      };
+      localStorage.setItem(cacheKey, JSON.stringify(layoutData));
+    } catch (error) {
+      console.warn('存储布局缓存失败:', error);
+    }
+
+    // 缩放到实际尺寸
+    const scale = containerWidth / referenceWidth;
+    const scaledPositions = positions.map(pos => ({
+      x: pos.x * scale,
+      y: pos.y * scale,
+      width: pos.width * scale,
+      height: pos.height * scale
+    }));
+
+    gallery.style.height = `${maxHeight * scale}px`;
+    return scaledPositions;
+  }
+
+  // 添加缓存清理函数
+  function clearLayoutCache() {
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('layout_')) {
+        localStorage.removeItem(key);
+      }
+    });
   }
 
   // 渲染图片
   async function renderGallery() {
-    const loadedImages = await loadImages();
-    const containerWidth = gallery.clientWidth;
-    const positions = calculateLayout(loadedImages, containerWidth);
+    try {
+      // 确保加载遮罩可见
+      loadingMask.classList.add('visible');
 
-    loadedImages.forEach((image, index) => {
-      const div = document.createElement('div');
-      div.className = 'gallery-item';
-      div.innerHTML = `
-        <img src="${image.path}" alt="${image.title}" loading="lazy">
-        <div class="title">${image.title}</div>
+      const loadedImages = await loadImages();
+      const containerWidth = gallery.clientWidth;
+
+      // 添加图片容器，但保持遮罩层和高度
+      gallery.style.height = '300px';
+      gallery.innerHTML = `
+        <div class="loading-mask visible">
+          <div class="loading-spinner"></div>
+        </div>
       `;
 
-      // 设置位置
-      div.style.transform = `translate(${positions[index].x}px, ${positions[index].y}px)`;
-      div.style.width = `${positions[index].width}px`;
+      const positions = calculateLayout(loadedImages, containerWidth);
 
-      gallery.appendChild(div);
+      loadedImages.forEach((image, index) => {
+        const item = document.createElement('div');
+        item.className = 'gallery-item';
+        item.innerHTML = `
+          <img src="${image.path}" alt="${image.title}" loading="lazy">
+          <div class="title">${image.title}</div>
+        `;
 
-      setTimeout(() => {
-        div.classList.add('visible');
-      }, index * 50);
-    });
+        // 设置位置
+        item.style.transform = `translate(${positions[index].x}px, ${positions[index].y}px)`;
+        item.style.width = `${positions[index].width}px`;
+
+        gallery.appendChild(item);
+
+        setTimeout(() => {
+          item.classList.add('visible');
+        }, index * 50);
+      });
+    } finally {
+      // 找到新创建的遮罩层并隐藏它
+      const mask = gallery.querySelector('.loading-mask');
+      if (mask) {
+        mask.classList.remove('visible');
+        // 短暂延迟后移除遮罩层
+        setTimeout(() => {
+          mask.remove();
+        }, 300); // 与CSS过渡时间匹配
+      }
+    }
   }
 
   renderGallery();
-
-  // 添加窗口调整大小时重新布局的功能
-  let resizeTimeout;
-  window.addEventListener('resize', () => {
-    clearTimeout(resizeTimeout);
-    resizeTimeout = setTimeout(() => {
-      renderGallery();
-    }, 100);
-  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -156,6 +243,31 @@ document.addEventListener('DOMContentLoaded', () => {
       displayImages(button.dataset.period);
     });
   });
+
+  // 添加防抖函数
+  function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+      const later = () => {
+        clearTimeout(timeout);
+        func(...args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    };
+  }
+
+  // 添加窗口调整大小的处理函数
+  const handleResize = debounce(() => {
+    const activeButton = document.querySelector('.period-btn.active');
+    if (activeButton) {
+      displayImages(activeButton.dataset.period);
+    } else {
+      displayImages('all');
+    }
+  }, 200); // 200ms 的防抖延迟
+
+  window.addEventListener('resize', handleResize);
 });
 
 // 添加导航栏滚动阴影效果
