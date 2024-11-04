@@ -1,0 +1,28 @@
+name: Sync Downstream
+
+on:
+  push:
+    branches: [main] # 可以根据需要修改分支名
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config --global user.name 'GitHub Action'
+          git config --global user.email 'action@github.com'
+
+      - name: Push to downstream
+        env:
+          TOKEN: ${{ secrets.PAT_TOKEN }} # 需要在仓库设置中配置PAT token
+        run: |
+          echo "开始同步到下游仓库..."
+          git remote add downstream https://$TOKEN@github.com/用户名/下游仓库名.git
+          git push downstream main:main --force
