@@ -317,7 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  // 添加窗口调整大小的���理函数
+  // 添加窗口调整大小的处理函数
   const handleResize = debounce(() => {
     const activeButton = document.querySelector('.period-btn.active');
     if (activeButton) {
