@@ -67,17 +67,65 @@ function displayImages(period) {
   // 添加缓存对象
   const layoutCache = {};
 
-  // 修改 calculateLayout 函数
+  // 判断设备类型和获取滚动条宽度的工具函数
+  const deviceUtils = {
+    _isMobile: null,
+    _scrollBarWidth: null,
+
+    getScrollBarWidth() {
+      if (this._scrollBarWidth !== null) {
+        return this._scrollBarWidth;
+      }
+
+      const outer = document.createElement('div');
+      outer.style.cssText = `
+        visibility: hidden;
+        overflow: scroll;
+        position: absolute;
+        top: -9999px;
+        width: 100px;
+        height: 100px;
+      `;
+
+      const inner = document.createElement('div');
+      inner.style.width = '100%';
+      outer.appendChild(inner);
+
+      document.body.appendChild(outer);
+      const scrollBarWidth = outer.offsetWidth - inner.offsetWidth;
+      outer.remove();
+
+      this._scrollBarWidth = scrollBarWidth;
+      return scrollBarWidth;
+    },
+
+    isMobile() {
+      if (this._isMobile !== null) {
+        return this._isMobile;
+      }
+      this._isMobile = this.getScrollBarWidth() === 0;
+      return this._isMobile;
+    }
+  };
+
+  // 修改 calculateLayout 函数中的相关代码
   function calculateLayout(items, containerWidth) {
+    const remSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    const paddingWidth = remSize * 2;
+
+    // 根据设备类型决定是否减去滚动条宽度
+    const scrollbarWidth = deviceUtils.isMobile() ? 0 : deviceUtils.getScrollBarWidth();
+    const availableWidth = containerWidth - paddingWidth - scrollbarWidth;
+
     // 根据容器宽度确定列数
     let columns;
-    if (containerWidth <= 800) {
+    if (availableWidth <= 800) {
       columns = 2;
-    } else if (containerWidth <= 1200) {
+    } else if (availableWidth <= 1200) {
       columns = 3;
-    } else if (containerWidth <= 1600) {
+    } else if (availableWidth <= 1600) {
       columns = 4;
-    } else if (containerWidth <= 2000) {
+    } else if (availableWidth <= 2000) {
       columns = 5;
     } else {
       columns = 6;
@@ -196,35 +244,7 @@ function displayImages(period) {
 
       const loadedImages = await loadImages();
       const remSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
-      // 如果当前是pc端，还要减去滚动条宽度
-      const getScrollBarWidth = () => {
-        // 创建外层容器
-        const outer = document.createElement('div');
-        outer.style.cssText = `
-          visibility: hidden;
-          overflow: scroll;
-          position: absolute;
-          top: -9999px;
-          width: 100px;
-          height: 100px;
-        `;
-
-        // 创建内层容器
-        const inner = document.createElement('div');
-        inner.style.width = '100%';
-        outer.appendChild(inner);
-
-        // 添加到 DOM 并计算
-        document.body.appendChild(outer);
-        const scrollBarWidth = outer.offsetWidth - inner.offsetWidth;
-
-        // 清理 DOM
-        outer.remove();
-
-        return scrollBarWidth;
-      };
-
-      const scrollbarWidth = getScrollBarWidth();
+      const scrollbarWidth = deviceUtils.isMobile() ? 0 : deviceUtils.getScrollBarWidth();
       const containerWidth = gallery.clientWidth - remSize * 2 - scrollbarWidth;
 
       // 添加图片容器，但保持遮罩层和高度
@@ -297,7 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  // 添加窗口调整大小的处理函数
+  // 添加窗口调整大小的���理函数
   const handleResize = debounce(() => {
     const activeButton = document.querySelector('.period-btn.active');
     if (activeButton) {

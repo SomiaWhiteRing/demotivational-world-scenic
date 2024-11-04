@@ -39,6 +39,8 @@ h1 {
 .period-nav {
   width: 100%;
   overflow: hidden;
+  display: flex;
+  justify-content: center;
 }
 
 .nav-scroll {
@@ -48,7 +50,7 @@ h1 {
   -ms-overflow-style: none;
   padding: 0.5rem;
   gap: 1rem;
-  justify-content: center;
+  justify-content: flex-start;
   max-width: 100%;
 }
 
@@ -160,6 +162,14 @@ h1 {
   .gallery-item {
     width: calc(50% - 1rem);
   }
+
+  .gallery-item .title {
+    opacity: 1;
+  }
+
+  .gallery-item:hover .title {
+    opacity: 1;
+  }
 }
 
 @media (max-width: 480px) {
@@ -207,5 +217,12 @@ h1 {
   100% {
     transform: rotate(360deg);
   }
+}
+
+header nav {
+  /* 现有样式保持不变 */
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
