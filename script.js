@@ -192,15 +192,17 @@ function displayImages(period) {
 
   // 修改 loadImages 函数
   async function loadImages() {
+    let loadedCount = 0;
     const imagePromises = images.map(async (image, index) => {
       try {
         // 首先尝试从 IndexedDB 获取缓存的图片
         const cachedImage = await imageDB.getImage(image.path);
 
         if (cachedImage) {
+          loadedCount++;
           // 如果是首次加载，更新进度
           if (isFirstLoad) {
-            updateLoadingProgress(index + 1, images.length, true);
+            updateLoadingProgress(loadedCount, images.length, true);
           }
           // 使用缓存的图片
           const img = new Image();
@@ -218,14 +220,16 @@ function displayImages(period) {
             img.src = objectUrl;
           });
         } else {
-          // 如果是首次加载，更新进度
-          if (isFirstLoad) {
-            updateLoadingProgress(index + 1, images.length, false);
-          }
           // 从网络加载并缓存
           const response = await fetch(image.path);
           const blob = await response.blob();
           await imageDB.saveImage(image.path, blob);
+
+          loadedCount++;
+          // 如果是首次加载，更新进度
+          if (isFirstLoad) {
+            updateLoadingProgress(loadedCount, images.length, false);
+          }
 
           const img = new Image();
           return new Promise((resolve) => {
@@ -241,6 +245,11 @@ function displayImages(period) {
         }
       } catch (error) {
         console.warn('加载图片失败:', error);
+        loadedCount++;
+        // 即使加载失败也更新进度
+        if (isFirstLoad) {
+          updateLoadingProgress(loadedCount, images.length, false);
+        }
         // 如果缓存失败，直接加载图片
         const img = new Image();
         return new Promise((resolve) => {
@@ -332,7 +341,7 @@ function displayImages(period) {
       height: item.height
     })))}`;
 
-    // 尝试��� localStorage 获取缓存
+    // 尝试 localStorage 获取缓存
     try {
       const cachedLayout = localStorage.getItem(cacheKey);
       if (cachedLayout) {
