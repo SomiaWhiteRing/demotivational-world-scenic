@@ -1,6 +1,18 @@
 let articles = null;
 let descriptions = null;
 
+// 将所有语言相关的代码整合在一起
+const currentLang = (() => {
+  // 获取用户语言
+  const lang = navigator.language.toLowerCase();
+  if (lang.startsWith('zh')) {
+    return 'zh';
+  } else if (lang.startsWith('en')) {
+    return 'en';
+  }
+  return 'ja'; // 默认日语
+})();
+
 async function loadData() {
   const [articlesResponse, descriptionsResponse] = await Promise.all([
     fetch('article.json'),
@@ -16,6 +28,20 @@ async function loadData() {
 function displayImages(period) {
   const gallery = document.querySelector('.gallery');
   const description = document.querySelector('.description');
+  const aboutContainer = document.querySelector('.about-container');
+
+  // 处理关于页面的显示
+  if (period === 'about') {
+    gallery.style.display = 'none';
+    description.style.display = 'none';
+    aboutContainer.classList.add('visible');
+    return;
+  }
+
+  // 其他页面显示时隐藏关于页面
+  gallery.style.display = 'block';
+  description.style.display = 'block';
+  aboutContainer.classList.remove('visible');
 
   // 首先清空gallery、重设高度并添加加载遮罩
   gallery.style.height = '300px';
@@ -37,6 +63,25 @@ function displayImages(period) {
     });
     description.textContent = '';
     description.classList.remove('visible');
+  } else if (period === 'random') {
+    // 获取所有图片
+    const allImages = [];
+    Object.keys(articles).forEach(key => {
+      Object.entries(articles[key]).forEach(([title, path]) => {
+        allImages.push({ title, path, period: key });
+      });
+    });
+
+    // 随机抽取40张图片
+    const selectedImages = new Set();
+    while (selectedImages.size < Math.min(40, allImages.length)) {
+      const randomIndex = Math.floor(Math.random() * allImages.length);
+      selectedImages.add(randomIndex);
+    }
+
+    images = Array.from(selectedImages).map(index => allImages[index]);
+    description.textContent = i18n[currentLang].random;
+    description.classList.add('visible');
   } else {
     Object.entries(articles[period]).forEach(([title, path]) => {
       images.push({ title, path, period });
@@ -45,20 +90,113 @@ function displayImages(period) {
     description.classList.add('visible');
   }
 
-  // 创建并等待所有图片加载完成
-  async function loadImages() {
-    const imagePromises = images.map(image => {
-      return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-          resolve({
-            ...image,
-            width: img.width,
-            height: img.height
-          });
+  // 添加 IndexedDB 相关函数
+  const imageDB = {
+    db: null,
+
+    async init() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open('ImageCache', 1);
+
+        request.onerror = () => reject(request.error);
+
+        request.onupgradeneeded = (event) => {
+          const db = event.target.result;
+          if (!db.objectStoreNames.contains('images')) {
+            db.createObjectStore('images', { keyPath: 'path' });
+          }
         };
-        img.src = image.path;
+
+        request.onsuccess = (event) => {
+          this.db = event.target.result;
+          resolve();
+        };
       });
+    },
+
+    async getImage(path) {
+      if (!this.db) await this.init();
+
+      return new Promise((resolve) => {
+        const transaction = this.db.transaction(['images'], 'readonly');
+        const store = transaction.objectStore('images');
+        const request = store.get(path);
+
+        request.onsuccess = () => resolve(request.result);
+      });
+    },
+
+    async saveImage(path, blob) {
+      if (!this.db) await this.init();
+
+      return new Promise((resolve, reject) => {
+        const transaction = this.db.transaction(['images'], 'readwrite');
+        const store = transaction.objectStore('images');
+        const item = { path, blob, timestamp: Date.now() };
+        const request = store.put(item);
+
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    }
+  };
+
+  // 修改 loadImages 函数
+  async function loadImages() {
+    const imagePromises = images.map(async (image) => {
+      try {
+        // 首先尝试从 IndexedDB 获取缓存的图片
+        const cachedImage = await imageDB.getImage(image.path);
+
+        if (cachedImage) {
+          // 如果有缓存，使用缓存的图片
+          const img = new Image();
+          const objectUrl = URL.createObjectURL(cachedImage.blob);
+
+          return new Promise((resolve) => {
+            img.onload = () => {
+              URL.revokeObjectURL(objectUrl);
+              resolve({
+                ...image,
+                width: img.width,
+                height: img.height
+              });
+            };
+            img.src = objectUrl;
+          });
+        } else {
+          // 如果没有缓存，从网络加载并缓存
+          const response = await fetch(image.path);
+          const blob = await response.blob();
+          await imageDB.saveImage(image.path, blob);
+
+          const img = new Image();
+          return new Promise((resolve) => {
+            img.onload = () => {
+              resolve({
+                ...image,
+                width: img.width,
+                height: img.height
+              });
+            };
+            img.src = URL.createObjectURL(blob);
+          });
+        }
+      } catch (error) {
+        console.warn('加载图片失:', error);
+        // 如果缓存失败，直接加载图片
+        const img = new Image();
+        return new Promise((resolve) => {
+          img.onload = () => {
+            resolve({
+              ...image,
+              width: img.width,
+              height: img.height
+            });
+          };
+          img.src = image.path;
+        });
+      }
     });
 
     return Promise.all(imagePromises);
@@ -123,7 +261,7 @@ function displayImages(period) {
       columns = 2;
     } else if (availableWidth <= 1200) {
       columns = 3;
-    } else if (availableWidth <= 1600) {
+    } else if (availableWidth <= 1400) {
       columns = 4;
     } else if (availableWidth <= 2000) {
       columns = 5;
@@ -304,7 +442,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // 添加防抖函数
+  // 添加防抖函
   function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
@@ -328,6 +466,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 200); // 200ms 的防抖延迟
 
   window.addEventListener('resize', handleResize);
+
+  initLanguageSwitch();
 });
 
 // 添加导航栏滚动阴影效果
@@ -338,4 +478,57 @@ window.addEventListener('scroll', () => {
   } else {
     header.style.boxShadow = 'none';
   }
-}); 
+});
+
+// 语言切换功能
+function initLanguageSwitch() {
+  const langBtns = document.querySelectorAll('.lang-btn');
+
+  langBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentLang = btn.dataset.lang;
+
+      // 更新按钮状态
+      langBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      // 更新界面文本
+      updateUIText();
+
+      // 保存语言选择
+      localStorage.setItem('preferredLanguage', currentLang);
+    });
+  });
+
+  // 加载保存的语言选择
+  const savedLang = localStorage.getItem('preferredLanguage');
+  if (savedLang) {
+    const langBtn = document.querySelector(`[data-lang="${savedLang}"]`);
+    if (langBtn) langBtn.click();
+  }
+}
+
+// 更新界面文本
+function updateUIText() {
+  // 更新导航按钮文本
+  const allBtn = document.querySelector('[data-period="all"]');
+  const randomBtn = document.querySelector('[data-period="random"]');
+  const aboutBtn = document.querySelector('[data-period="about"]');
+
+  if (allBtn) allBtn.textContent = i18n[currentLang].nav.all;
+  if (randomBtn) randomBtn.textContent = i18n[currentLang].nav.random;
+  if (aboutBtn) aboutBtn.textContent = i18n[currentLang].nav.about;
+
+  // 更新关于页面内容
+  const aboutTitle = document.querySelector('.about-title');
+  const aboutContent = document.querySelector('.about-content');
+
+  if (aboutTitle) aboutTitle.textContent = i18n[currentLang].about.title;
+  if (aboutContent) {
+    const descriptionContainer = aboutContent.querySelector('div') || aboutContent;
+    descriptionContainer.innerHTML += i18n[currentLang].about.description;
+  }
+}
+
+// 在页面加载时初始化
+document.addEventListener('DOMContentLoaded', updateUIText); 
