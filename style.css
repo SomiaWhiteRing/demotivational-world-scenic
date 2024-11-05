@@ -98,6 +98,8 @@ header h1 {
 .gallery-item {
   position: absolute;
   transition: transform 0.3s ease-out;
+  cursor: pointer;
+  transition: opacity 0.3s ease;
 }
 
 .gallery-item .title {
@@ -136,6 +138,7 @@ header h1 {
 
 .gallery-item:hover {
   transform: scale(1.02);
+  opacity: 0.9;
 }
 
 @media (max-width: 2000px) {
@@ -176,7 +179,6 @@ header h1 {
   }
 
   .description {
-    margin-top: 100px;
     font-size: 0.9rem;
   }
 }
@@ -281,5 +283,10 @@ header h1 {
   100% {
     opacity: 0.6;
   }
+}
+
+/* PhotoSwipe 自定义样式 */
+.pswp__bg {
+  transition: opacity 0.3s ease;
 }
 

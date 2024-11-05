@@ -1,6 +1,30 @@
 let articles = null;
 let descriptions = null;
 
+// 在文件开头添加以下代码
+if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+  // 本地环境下注销所有 ServiceWorker
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.getRegistrations().then(registrations => {
+      registrations.forEach(registration => {
+        registration.unregister();
+        console.log('ServiceWorker 已在本地环境下禁用');
+      });
+    });
+  }
+} else {
+  // 生产环境下正常注册 ServiceWorker
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').then(registration => {
+        console.log('ServiceWorker 注册成功:', registration.scope);
+      }).catch(error => {
+        console.log('ServiceWorker 注册失败:', error);
+      });
+    });
+  }
+}
+
 // 将所有语言相关的代码整合在一起
 const currentLang = (() => {
   // 获取用户语言
@@ -378,26 +402,22 @@ function displayImages(period) {
   async function renderGallery() {
     try {
       loadingMask.classList.add('visible');
-
-      // 先获取图片尺寸信息
       const loadedImages = await loadImages();
       const containerWidth = gallery.clientWidth - (parseFloat(getComputedStyle(document.documentElement).fontSize) * 2) -
         (deviceUtils.isMobile() ? 0 : deviceUtils.getScrollBarWidth());
 
-      // 计算布局
       const positions = calculateLayout(loadedImages, containerWidth);
 
-      // 清空现有内容
       gallery.innerHTML = '';
-      // 重新添加加载遮罩
       gallery.appendChild(loadingMask);
 
-      // 分批加载图片
+      // 创建 PhotoSwipe 实例
+      let pswp = null;
+
       const BATCH_SIZE = 20;
       for (let i = 0; i < loadedImages.length; i += BATCH_SIZE) {
         const batch = loadedImages.slice(i, i + BATCH_SIZE);
 
-        // 为这一批创建所有占位元素
         batch.forEach((image, batchIndex) => {
           const index = i + batchIndex;
           const item = document.createElement('div');
@@ -405,6 +425,39 @@ function displayImages(period) {
           item.style.transform = `translate(${positions[index].x}px, ${positions[index].y}px)`;
           item.style.width = `${positions[index].width}px`;
           item.style.height = `${positions[index].height}px`;
+
+          // 为每个图片项添加点击事件
+          item.addEventListener('click', (e) => {
+            e.preventDefault();
+
+            // 准备 PhotoSwipe 的图片数组
+            const items = loadedImages.map(img => ({
+              src: img.path,
+              width: img.width,
+              height: img.height
+            }));
+
+            // 配置 PhotoSwipe 选项
+            const options = {
+              dataSource: items,
+              index: index,
+              closeOnVerticalDrag: true,
+              padding: { top: 20, bottom: 20, left: 20, right: 20 },
+              bgOpacity: 0.9,
+              showHideOpacity: true,
+              errorMsg: i18n[currentLang].loadError || '图片加载失败'
+            };
+
+            // 在创建 PhotoSwipe 实例之前添加自定义元素
+            const lightbox = new PhotoSwipeLightbox({
+              ...options,
+              pswpModule: PhotoSwipe
+            });
+
+            lightbox.init();
+            lightbox.loadAndOpen(index);
+          });
+
           gallery.appendChild(item);
         });
 
@@ -504,7 +557,7 @@ function initLanguageSwitch() {
       // 更新界面文本
       updateUIText();
 
-      // 保存语言选择
+      // 保存言选择
       localStorage.setItem('preferredLanguage', currentLang);
     });
   });
@@ -541,16 +594,3 @@ function updateUIText() {
 
 // 在页面加载时初始化
 document.addEventListener('DOMContentLoaded', updateUIText);
-
-// 注册 Service Worker
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js')
-      .then(registration => {
-        console.log('ServiceWorker 注册成功:', registration.scope);
-      })
-      .catch(error => {
-        console.log('ServiceWorker 注册失败:', error);
-      });
-  });
-} 

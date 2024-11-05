@@ -5,7 +5,9 @@ const STATIC_ASSETS = [
   '/style.css',
   '/script.js',
   '/i18n.js',
-  '/manifest.json'
+  '/manifest.json',
+  '/modules/photoswipe.min.js',
+  '/modules/photoswipe.min.css',
 ];
 
 // 安装 Service Worker
