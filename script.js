@@ -142,12 +142,20 @@ function displayImages(period) {
   // 添加 IndexedDB 相关函数
   const imageDB = {
     db: null,
+    initPromise: null, // 添加初始化Promise缓存
 
     async init() {
-      return new Promise((resolve, reject) => {
+      if (this.initPromise) return this.initPromise;
+      if (this.db) return Promise.resolve();
+
+      this.initPromise = new Promise((resolve, reject) => {
         const request = indexedDB.open('ImageCache', 1);
 
-        request.onerror = () => reject(request.error);
+        request.onerror = (event) => {
+          console.error('IndexedDB 打开失败:', event.target.error);
+          this.initPromise = null;
+          reject(event.target.error);
+        };
 
         request.onupgradeneeded = (event) => {
           const db = event.target.result;
@@ -161,31 +169,50 @@ function displayImages(period) {
           resolve();
         };
       });
+
+      return this.initPromise;
     },
 
     async getImage(path) {
-      if (!this.db) await this.init();
+      try {
+        if (!this.db) await this.init();
 
-      return new Promise((resolve) => {
-        const transaction = this.db.transaction(['images'], 'readonly');
-        const store = transaction.objectStore('images');
-        const request = store.get(path);
+        return new Promise((resolve) => {
+          const transaction = this.db.transaction(['images'], 'readonly');
+          const store = transaction.objectStore('images');
+          const request = store.get(path);
 
-        request.onsuccess = () => resolve(request.result);
-      });
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = (event) => {
+            console.error('从缓存获取图片失败:', path, event.target.error);
+            resolve(null);
+          };
+        });
+      } catch (error) {
+        console.error('访问缓存失败:', error);
+        return null;
+      }
     },
 
     async saveImage(path, blob) {
       if (!this.db) await this.init();
 
       return new Promise((resolve, reject) => {
-        const transaction = this.db.transaction(['images'], 'readwrite');
-        const store = transaction.objectStore('images');
-        const item = { path, blob, timestamp: Date.now() };
-        const request = store.put(item);
+        try {
+          const transaction = this.db.transaction(['images'], 'readwrite');
+          const store = transaction.objectStore('images');
+          const item = { path, blob, timestamp: Date.now() };
+          const request = store.put(item);
 
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
+          request.onsuccess = () => resolve();
+          request.onerror = (event) => {
+            console.error('缓存图片失败:', path, event.target.error);
+            reject(event.target.error);
+          };
+        } catch (error) {
+          console.error('保存到缓存失败:', error);
+          reject(error);
+        }
       });
     }
   };
@@ -198,13 +225,12 @@ function displayImages(period) {
         // 首先尝试从 IndexedDB 获取缓存的图片
         const cachedImage = await imageDB.getImage(image.path);
 
-        if (cachedImage) {
+        if (cachedImage && cachedImage.blob) {
           loadedCount++;
-          // 如果是首次加载，更新进度
           if (isFirstLoad) {
             updateLoadingProgress(loadedCount, images.length, true);
           }
-          // 使用缓存的图片
+
           const img = new Image();
           const objectUrl = URL.createObjectURL(cachedImage.blob);
 
@@ -214,54 +240,87 @@ function displayImages(period) {
               resolve({
                 ...image,
                 width: img.width,
-                height: img.height
+                height: img.height,
+                blob: cachedImage.blob  // 保存 blob 数据以供后续使用
               });
             };
             img.src = objectUrl;
           });
-        } else {
-          // 从网络加载并缓存
-          const response = await fetch(image.path);
-          const blob = await response.blob();
-          await imageDB.saveImage(image.path, blob);
-
-          loadedCount++;
-          // 如果是首次加载，更新进度
-          if (isFirstLoad) {
-            updateLoadingProgress(loadedCount, images.length, false);
-          }
-
-          const img = new Image();
-          return new Promise((resolve) => {
-            img.onload = () => {
-              resolve({
-                ...image,
-                width: img.width,
-                height: img.height
-              });
-            };
-            img.src = URL.createObjectURL(blob);
-          });
         }
-      } catch (error) {
-        console.warn('加载图片失败:', error);
+
+        // 如果没有缓存，从网络加载
+        const response = await fetch(image.path);
+        const blob = await response.blob();
+
+        // 保存到 IndexedDB
+        try {
+          await imageDB.saveImage(image.path, blob);
+        } catch (cacheError) {
+          console.warn('缓存图片失败:', cacheError);
+        }
+
         loadedCount++;
-        // 即使加载失败也更新进度
         if (isFirstLoad) {
           updateLoadingProgress(loadedCount, images.length, false);
         }
-        // 如果缓存失败，直接加载图片
+
         const img = new Image();
         return new Promise((resolve) => {
           img.onload = () => {
             resolve({
               ...image,
               width: img.width,
-              height: img.height
+              height: img.height,
+              blob: blob  // 保存 blob 数据以供后续使用
             });
           };
-          img.src = image.path;
+          img.src = URL.createObjectURL(blob);
         });
+
+      } catch (error) {
+        console.warn('从网络加载图片失败，尝试使用缓存:', error);
+
+        // 网络请求失败时，再次尝试从 IndexedDB 读取
+        try {
+          const cachedImage = await imageDB.getImage(image.path);
+          if (cachedImage && cachedImage.blob) {
+            loadedCount++;
+            if (isFirstLoad) {
+              updateLoadingProgress(loadedCount, images.length, true);
+            }
+
+            const img = new Image();
+            const objectUrl = URL.createObjectURL(cachedImage.blob);
+
+            return new Promise((resolve) => {
+              img.onload = () => {
+                URL.revokeObjectURL(objectUrl);
+                resolve({
+                  ...image,
+                  width: img.width,
+                  height: img.height,
+                  blob: cachedImage.blob  // 保存 blob 数据以供后续使用
+                });
+              };
+              img.src = objectUrl;
+            });
+          }
+        } catch (cacheError) {
+          console.warn('从缓存加载图片也失败:', cacheError);
+        }
+
+        // 如果所有尝试都失败，返回错误状态
+        loadedCount++;
+        if (isFirstLoad) {
+          updateLoadingProgress(loadedCount, images.length, false);
+        }
+
+        return {
+          ...image,
+          width: 300,
+          height: 300,
+          error: true
+        };
       }
     });
 
@@ -360,7 +419,7 @@ function displayImages(period) {
         return scaledPositions;
       }
     } catch (error) {
-      console.warn('读取布局缓存失败:', error);
+      console.warn('缓存失败:', error);
     }
 
     const gap = 16;
@@ -440,7 +499,7 @@ function displayImages(period) {
     });
   }
 
-  // 渲染图片
+  // 渲染片
   async function renderGallery() {
     try {
       loadingMask.classList.add('visible');
@@ -452,9 +511,6 @@ function displayImages(period) {
 
       gallery.innerHTML = '';
       gallery.appendChild(loadingMask);
-
-      // 创建 PhotoSwipe 实例
-      let pswp = null;
 
       const BATCH_SIZE = 20;
       for (let i = 0; i < loadedImages.length; i += BATCH_SIZE) {
@@ -470,35 +526,124 @@ function displayImages(period) {
 
           const isFavorite = favorites.includes(image.path);
 
-          item.innerHTML = `
-            <img src="${image.path}" alt="${image.title}" loading="lazy">
-            <div class="title-container">
-              <div class="title">${image.title}</div>
-              <button class="favorite-btn ${isFavorite ? 'active' : ''}" data-path="${image.path}">
-                <svg viewBox="0 0 24 24">
-                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                </svg>
-              </button>
-            </div>
-          `;
+          const createImageElement = async () => {
+            if (image.error) {
+              return {
+                html: `
+                  <div class="error-placeholder">
+                    <span>${i18n[currentLang].loadError || '图片加载失败'}</span>
+                  </div>
+                `,
+                blob: null
+              };
+            }
 
-          // 添加收藏按钮点击事件
-          const favoriteBtn = item.querySelector('.favorite-btn');
-          favoriteBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            toggleFavorite(favoriteBtn, favoriteBtn.dataset.path);
+            try {
+              let imageBlob;
+
+              if (image.blob) {
+                imageBlob = image.blob;
+              } else {
+                const cachedImage = await imageDB.getImage(image.path);
+                if (cachedImage && cachedImage.blob) {
+                  imageBlob = cachedImage.blob;
+                }
+              }
+
+              // 创建一个空的img标签，稍后设置src
+              return {
+                html: `<img alt="${image.title}" loading="lazy" style="width: 100%; height: 100%; object-fit: cover;">`,
+                blob: imageBlob
+              };
+            } catch (error) {
+              console.error('创建图片元素失败:', error);
+              return {
+                html: `
+                  <div class="error-placeholder">
+                    <span>${i18n[currentLang].loadError || '图片加载失败'}</span>
+                  </div>
+                `,
+                blob: null
+              };
+            }
+          };
+
+          // 异步设置图片内容
+          createImageElement().then(({ html, blob }) => {
+            // 先设置基本的HTML结构
+            item.innerHTML = `
+              <div class="image-container" style="width: 100%; height: 100%;">
+                ${html}
+              </div>
+              <div class="title-container">
+                <div class="title">${image.title}</div>
+                <button class="favorite-btn ${isFavorite ? 'active' : ''}" data-path="${image.path}">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                  </svg>
+                </button>
+              </div>
+            `;
+
+            const img = item.querySelector('img');
+            if (img && blob) {
+              const objectUrl = URL.createObjectURL(blob);
+
+              img.onload = () => {
+                item.classList.remove('placeholder');
+              };
+
+              img.onerror = (e) => {
+                console.error('图片加载失败:', image.title, e);
+                URL.revokeObjectURL(objectUrl);
+                item.innerHTML = `
+                  <div class="error-placeholder">
+                    <span>${i18n[currentLang].loadError || '图片加载失败'}</span>
+                  </div>
+                `;
+              };
+
+              img.dataset.objectUrl = objectUrl;
+              img.src = objectUrl;
+            } else if (!blob) {
+              img.src = image.path;
+            }
+
+            // 添加收藏按钮点击事件
+            const favoriteBtn = item.querySelector('.favorite-btn');
+            if (favoriteBtn) {
+              favoriteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleFavorite(favoriteBtn, favoriteBtn.dataset.path);
+              });
+            }
           });
+
 
           // 为每个图片项添加点击事件
           item.addEventListener('click', (e) => {
             e.preventDefault();
 
             // 准备 PhotoSwipe 的图片数组
-            const items = loadedImages.map(img => ({
-              src: img.path,
-              width: img.width,
-              height: img.height
-            }));
+            const items = loadedImages.map(img => {
+              // 如果有 blob 数据，使用 blob URL
+              if (img.blob) {
+                const blobUrl = URL.createObjectURL(img.blob);
+                return {
+                  src: blobUrl,
+                  w: img.width,
+                  h: img.height,
+                  title: img.title
+                };
+              }
+              // 否则使用原始路径
+              return {
+                src: img.path,
+                w: img.width,
+                h: img.height,
+                title: img.title
+              };
+            });
 
             // 配置 PhotoSwipe 选项
             const options = {
@@ -511,10 +656,20 @@ function displayImages(period) {
               errorMsg: i18n[currentLang].loadError || '图片加载失败'
             };
 
-            // 在创建 PhotoSwipe 实例之前添加自定义元素
+            // 创建并初始化 PhotoSwipe
             const lightbox = new PhotoSwipeLightbox({
               ...options,
               pswpModule: PhotoSwipe
+            });
+
+            // 添加关闭时的清理
+            lightbox.on('destroy', () => {
+              // 清理所有为 PhotoSwipe 创建的 blob URLs
+              items.forEach(item => {
+                if (item.src.startsWith('blob:')) {
+                  URL.revokeObjectURL(item.src);
+                }
+              });
             });
 
             lightbox.init();
@@ -523,50 +678,6 @@ function displayImages(period) {
 
           gallery.appendChild(item);
         });
-
-        // 修改加载图片的 Promise
-        await Promise.all(batch.map((image, batchIndex) => {
-          const index = i + batchIndex;
-          const item = gallery.children[index + 1]; // +1 是因为第一个子元素是 loadingMask
-
-          return new Promise(resolve => {
-            const isFavorite = favorites.includes(image.path);
-
-            item.innerHTML = `
-              <img src="${image.path}" alt="${image.title}" loading="lazy">
-              <div class="title-container">
-                <div class="title">${image.title}</div>
-                <button class="favorite-btn ${isFavorite ? 'active' : ''}" data-path="${image.path}">
-                  <svg viewBox="0 0 24 24">
-                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                  </svg>
-                </button>
-              </div>
-            `;
-
-            // 添加收藏按钮点击事件
-            const favoriteBtn = item.querySelector('.favorite-btn');
-            favoriteBtn.addEventListener('click', (e) => {
-              e.stopPropagation();
-              const path = favoriteBtn.dataset.path;
-              const index = favorites.indexOf(path);
-
-              if (index === -1) {
-                favorites.push(path);
-                favoriteBtn.classList.add('active');
-              } else {
-                favorites.splice(index, 1);
-                favoriteBtn.classList.remove('active');
-              }
-
-              localStorage.setItem('favorites', JSON.stringify(favorites));
-            });
-
-            item.classList.remove('placeholder');
-            item.classList.add('visible');
-            resolve();
-          });
-        }));
 
         // 加载完第一批后移除遮罩
         if (i === 0) {
@@ -648,7 +759,7 @@ function initLanguageSwitch() {
       // 更新界面文本
       updateUIText();
 
-      // 保存言选择
+      // 保存言择
       localStorage.setItem('preferredLanguage', currentLang);
     });
   });
@@ -768,3 +879,16 @@ function updateLoadingProgress(current, total, fromCache) {
     }
   }
 }
+
+// 在组件卸载或页面切换时清理所有objectUrl
+function cleanupObjectUrls() {
+  const images = document.querySelectorAll('img[data-object-url]');
+  images.forEach(img => {
+    if (img.dataset.objectUrl) {
+      URL.revokeObjectURL(img.dataset.objectUrl);
+    }
+  });
+}
+
+// 在相关的清理函数中调用（比如切换页面时）
+window.addEventListener('beforeunload', cleanupObjectUrls);
