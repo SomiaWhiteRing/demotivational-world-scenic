@@ -15,7 +15,7 @@ const i18n = {
       
       <p>サイトのソースコードは<a href="https://github.com/demotivational-world-preservation/demotivational-world-scenic">Github</a>にあり、<a href="https://vercel.com/">Vercel</a>でホストされています。</p>`
     },
-    random: "縁至40選。"
+    random: "随机40选。"
   },
   zh: {
     nav: {
@@ -33,7 +33,7 @@ const i18n = {
       
       <p>网站源码位于<a href="https://github.com/demotivational-world-preservation/demotivational-world-scenic">Github</a>，托管于<a href="https://vercel.com/">Vercel</a>。</p>`
     },
-    random: "缘至40选。"
+    random: "ランダム40選。"
   },
   en: {
     nav: {
@@ -51,6 +51,6 @@ const i18n = {
       
       <p>The website's source code is available on <a href="https://github.com/demotivational-world-preservation/demotivational-world-scenic">Github</a> and hosted on <a href="https://vercel.com/">Vercel</a>.</p>`
     },
-    random: "Random 40."
+    random: "Random 40 Selection."
   }
 }; 

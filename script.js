@@ -377,53 +377,62 @@ function displayImages(period) {
   // 渲染图片
   async function renderGallery() {
     try {
-      // 确保加载遮罩可见
       loadingMask.classList.add('visible');
 
+      // 先获取图片尺寸信息
       const loadedImages = await loadImages();
-      const remSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
-      const scrollbarWidth = deviceUtils.isMobile() ? 0 : deviceUtils.getScrollBarWidth();
-      const containerWidth = gallery.clientWidth - remSize * 2 - scrollbarWidth;
+      const containerWidth = gallery.clientWidth - (parseFloat(getComputedStyle(document.documentElement).fontSize) * 2) -
+        (deviceUtils.isMobile() ? 0 : deviceUtils.getScrollBarWidth());
 
-      // 添加图片容器，但保持遮罩层和高度
-      gallery.style.height = '300px';
-      gallery.innerHTML = `
-        <div class="loading-mask visible">
-          <div class="loading-spinner"></div>
-        </div>
-      `;
-
+      // 计算布局
       const positions = calculateLayout(loadedImages, containerWidth);
 
-      loadedImages.forEach((image, index) => {
-        const item = document.createElement('div');
-        item.className = 'gallery-item';
-        item.innerHTML = `
-          <img src="${image.path}" alt="${image.title}" loading="lazy">
-          <div class="title">${image.title}</div>
-        `;
+      // 清空现有内容
+      gallery.innerHTML = '';
+      // 重新添加加载遮罩
+      gallery.appendChild(loadingMask);
 
-        // 设置位置和尺寸
-        item.style.transform = `translate(${positions[index].x}px, ${positions[index].y}px)`;
-        item.style.width = `${positions[index].width}px`;
-        item.style.height = `${positions[index].height}px`;
+      // 分批加载图片
+      const BATCH_SIZE = 20;
+      for (let i = 0; i < loadedImages.length; i += BATCH_SIZE) {
+        const batch = loadedImages.slice(i, i + BATCH_SIZE);
 
-        gallery.appendChild(item);
+        // 为这一批创建所有占位元素
+        batch.forEach((image, batchIndex) => {
+          const index = i + batchIndex;
+          const item = document.createElement('div');
+          item.className = 'gallery-item placeholder';
+          item.style.transform = `translate(${positions[index].x}px, ${positions[index].y}px)`;
+          item.style.width = `${positions[index].width}px`;
+          item.style.height = `${positions[index].height}px`;
+          gallery.appendChild(item);
+        });
 
-        setTimeout(() => {
-          item.classList.add('visible');
-        }, index * 50);
-      });
-    } finally {
-      // 找到新创建的遮罩层并隐藏它
-      const mask = gallery.querySelector('.loading-mask');
-      if (mask) {
-        mask.classList.remove('visible');
-        // 短暂延迟后移除遮罩层
-        setTimeout(() => {
-          mask.remove();
-        }, 300); // 与CSS过渡时间匹配
+        // 加载这一批的图片
+        await Promise.all(batch.map((image, batchIndex) => {
+          const index = i + batchIndex;
+          const item = gallery.children[index + 1]; // +1 是因为第一个子元素是 loadingMask
+
+          return new Promise(resolve => {
+            item.innerHTML = `
+              <img src="${image.path}" alt="${image.title}" loading="lazy">
+              <div class="title">${image.title}</div>
+            `;
+            item.classList.remove('placeholder');
+            item.classList.add('visible');
+            resolve();
+          });
+        }));
+
+        // 加载完第一批后移除遮罩
+        if (i === 0) {
+          loadingMask.classList.remove('visible');
+          setTimeout(() => loadingMask.remove(), 300);
+        }
       }
+    } catch (error) {
+      console.error('渲染图库失败:', error);
+      loadingMask.classList.remove('visible');
     }
   }
 
@@ -531,4 +540,17 @@ function updateUIText() {
 }
 
 // 在页面加载时初始化
-document.addEventListener('DOMContentLoaded', updateUIText); 
+document.addEventListener('DOMContentLoaded', updateUIText);
+
+// 注册 Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then(registration => {
+        console.log('ServiceWorker 注册成功:', registration.scope);
+      })
+      .catch(error => {
+        console.log('ServiceWorker 注册失败:', error);
+      });
+  });
+} 
