@@ -3,7 +3,7 @@ const i18n = {
     nav: {
       all: "全",
       random: "縁",
-      collection: "集",
+      favorite: "集",
       about: "概要"
     },
     about: {
@@ -14,16 +14,23 @@ const i18n = {
       
       <p>サイトがあなたの権利を侵害している場合は、<a href="mailto:demotivational@shatranj.space">ご連絡</a>ください。保存会は速やかに適切な対応をいたします。</p>
       
-      <p>サイトのソースコードは<a href="https://github.com/demotivational-world-preservation/demotivational-world-scenic">Github</a>にあり、<a href="https://vercel.com/">Vercel</a>でホストされています。</p>`
+      <p>サイトのソースコードは<a href="https://github.com/demotivational-world-preservation/demotivational-world-scenic">Github</a>にあり、<a href="https://vercel.com/">Vercel</a>でホストされています。</p>`,
     },
     random: "ランダム40選。",
-    noCollection: "未収録。"
+    noFavorite: "未収録。",
+    loading: {
+      initializing: "ギャラリーを初期化中...",
+      fromCache: "(キャッシュから読み込み)",
+      caching: "(キャッシュに保存中)",
+      tip: "初回読み込み時は画像をキャッシュに保存するため、しばらくお待ちください",
+      building: "フィードを構築中..."
+    }
   },
   zh: {
     nav: {
       all: "全",
       random: "缘",
-      collection: "集",
+      favorite: "集",
       about: "关于"
     },
     about: {
@@ -34,16 +41,23 @@ const i18n = {
       
       <p>如果网站侵犯了您的权益，请<a href="mailto:demotivational@shatranj.space">来信告知</a>，保存会将在第一时间做出妥善的回复。</p>
       
-      <p>网站源码位于<a href="https://github.com/demotivational-world-preservation/demotivational-world-scenic">Github</a>，托管于<a href="https://vercel.com/">Vercel</a>。</p>`
+      <p>网站源码位于<a href="https://github.com/demotivational-world-preservation/demotivational-world-scenic">Github</a>，托管于<a href="https://vercel.com/">Vercel</a>。</p>`,
     },
     random: "随机40选。",
-    noCollection: "暂未收录。"
+    noFavorite: "暂未收录。",
+    loading: {
+      initializing: "正在初始化图库...",
+      fromCache: "(从缓存加载)",
+      caching: "(正在缓存)",
+      tip: "首次加载需要缓存图片，请耐心等待",
+      building: "正在构建信息流..."
+    }
   },
   en: {
     nav: {
       all: "All",
       random: "Random",
-      collection: "Collection",
+      favorite: "Favorite",
       about: "About"
     },
     about: {
@@ -54,9 +68,16 @@ const i18n = {
       
       <p>If this website infringes upon your rights, please <a href="mailto:demotivational@shatranj.space">contact us</a>. We will respond appropriately as soon as possible.</p>
       
-      <p>The website's source code is available on <a href="https://github.com/demotivational-world-preservation/demotivational-world-scenic">Github</a> and hosted on <a href="https://vercel.com/">Vercel</a>.</p>`
+      <p>The website's source code is available on <a href="https://github.com/demotivational-world-preservation/demotivational-world-scenic">Github</a> and hosted on <a href="https://vercel.com/">Vercel</a>.</p>`,
     },
     random: "Random 40 Selection.",
-    noCollection: "Not Collected."
+    noFavorite: "Not Collected.",
+    loading: {
+      initializing: "Initializing gallery...",
+      fromCache: "(Loading from cache)",
+      caching: "(Caching)",
+      tip: "First load requires caching images, please be patient",
+      building: "Building feed..."
+    }
   }
-}; 
+}

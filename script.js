@@ -1,5 +1,9 @@
 let articles = null;
 let descriptions = null;
+let favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
+
+// 在文件开头添加标记初次加载的变量
+let isFirstLoad = !localStorage.getItem('hasLoaded');
 
 // 在文件开头添加以下代码
 if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
@@ -106,6 +110,27 @@ function displayImages(period) {
     images = Array.from(selectedImages).map(index => allImages[index]);
     description.textContent = i18n[currentLang].random;
     description.classList.add('visible');
+  } else if (period === 'favorite') {
+    // 处理收藏列表
+    Object.keys(articles).forEach(key => {
+      Object.entries(articles[key]).forEach(([title, path]) => {
+        if (favorites.includes(path)) {
+          images.push({ title, path, period: key });
+        }
+      });
+    });
+
+    if (images.length === 0) {
+      // 收藏为空时直接显示提示文本，不渲染画廊
+      description.textContent = i18n[currentLang].noFavorite;
+      description.classList.add('visible');
+      gallery.innerHTML = ''; // 清空画廊
+      gallery.style.height = '0'; // 收起画廊区域
+      return; // 直接返回，不继续执行渲染逻辑
+    } else {
+      description.textContent = `${images.length} ${i18n[currentLang].nav.favorite}`;
+      description.classList.add('visible');
+    }
   } else {
     Object.entries(articles[period]).forEach(([title, path]) => {
       images.push({ title, path, period });
@@ -167,13 +192,17 @@ function displayImages(period) {
 
   // 修改 loadImages 函数
   async function loadImages() {
-    const imagePromises = images.map(async (image) => {
+    const imagePromises = images.map(async (image, index) => {
       try {
         // 首先尝试从 IndexedDB 获取缓存的图片
         const cachedImage = await imageDB.getImage(image.path);
 
         if (cachedImage) {
-          // 如果有缓存，使用缓存的图片
+          // 如果是首次加载，更新进度
+          if (isFirstLoad) {
+            updateLoadingProgress(index + 1, images.length, true);
+          }
+          // 使用缓存的图片
           const img = new Image();
           const objectUrl = URL.createObjectURL(cachedImage.blob);
 
@@ -189,7 +218,11 @@ function displayImages(period) {
             img.src = objectUrl;
           });
         } else {
-          // 如果没有缓存，从网络加载并缓存
+          // 如果是首次加载，更新进度
+          if (isFirstLoad) {
+            updateLoadingProgress(index + 1, images.length, false);
+          }
+          // 从网络加载并缓存
           const response = await fetch(image.path);
           const blob = await response.blob();
           await imageDB.saveImage(image.path, blob);
@@ -207,7 +240,7 @@ function displayImages(period) {
           });
         }
       } catch (error) {
-        console.warn('加载图片失:', error);
+        console.warn('加载图片失败:', error);
         // 如果缓存失败，直接加载图片
         const img = new Image();
         return new Promise((resolve) => {
@@ -270,7 +303,7 @@ function displayImages(period) {
     }
   };
 
-  // 修改 calculateLayout 函数中的相关代码
+  // 修改 calculateLayout 函数中的关相代码
   function calculateLayout(items, containerWidth) {
     const remSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
     const paddingWidth = remSize * 2;
@@ -299,7 +332,7 @@ function displayImages(period) {
       height: item.height
     })))}`;
 
-    // 尝试从 localStorage 获取缓存
+    // 尝试��� localStorage 获取缓存
     try {
       const cachedLayout = localStorage.getItem(cacheKey);
       if (cachedLayout) {
@@ -426,6 +459,27 @@ function displayImages(period) {
           item.style.width = `${positions[index].width}px`;
           item.style.height = `${positions[index].height}px`;
 
+          const isFavorite = favorites.includes(image.path);
+
+          item.innerHTML = `
+            <img src="${image.path}" alt="${image.title}" loading="lazy">
+            <div class="title-container">
+              <div class="title">${image.title}</div>
+              <button class="favorite-btn ${isFavorite ? 'active' : ''}" data-path="${image.path}">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                </svg>
+              </button>
+            </div>
+          `;
+
+          // 添加收藏按钮点击事件
+          const favoriteBtn = item.querySelector('.favorite-btn');
+          favoriteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleFavorite(favoriteBtn, favoriteBtn.dataset.path);
+          });
+
           // 为每个图片项添加点击事件
           item.addEventListener('click', (e) => {
             e.preventDefault();
@@ -461,16 +515,44 @@ function displayImages(period) {
           gallery.appendChild(item);
         });
 
-        // 加载这一批的图片
+        // 修改加载图片的 Promise
         await Promise.all(batch.map((image, batchIndex) => {
           const index = i + batchIndex;
           const item = gallery.children[index + 1]; // +1 是因为第一个子元素是 loadingMask
 
           return new Promise(resolve => {
+            const isFavorite = favorites.includes(image.path);
+
             item.innerHTML = `
               <img src="${image.path}" alt="${image.title}" loading="lazy">
-              <div class="title">${image.title}</div>
+              <div class="title-container">
+                <div class="title">${image.title}</div>
+                <button class="favorite-btn ${isFavorite ? 'active' : ''}" data-path="${image.path}">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                  </svg>
+                </button>
+              </div>
             `;
+
+            // 添加收藏按钮点击事件
+            const favoriteBtn = item.querySelector('.favorite-btn');
+            favoriteBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const path = favoriteBtn.dataset.path;
+              const index = favorites.indexOf(path);
+
+              if (index === -1) {
+                favorites.push(path);
+                favoriteBtn.classList.add('active');
+              } else {
+                favorites.splice(index, 1);
+                favoriteBtn.classList.remove('active');
+              }
+
+              localStorage.setItem('favorites', JSON.stringify(favorites));
+            });
+
             item.classList.remove('placeholder');
             item.classList.add('visible');
             resolve();
@@ -594,3 +676,86 @@ function updateUIText() {
 
 // 在页面加载时初始化
 document.addEventListener('DOMContentLoaded', updateUIText);
+
+// 添加收藏变化时重新渲染的功能
+function handleFavoriteChange() {
+  const activeButton = document.querySelector('.period-btn.active');
+  if (activeButton && activeButton.dataset.period === 'favorite') {
+    displayImages('favorite');
+  }
+}
+
+// 修改收藏按钮点击事件处理
+function toggleFavorite(btn, path) {
+  const index = favorites.indexOf(path);
+
+  if (index === -1) {
+    favorites.push(path);
+    btn.classList.add('active');
+  } else {
+    favorites.splice(index, 1);
+    btn.classList.remove('active');
+  }
+
+  localStorage.setItem('favorites', JSON.stringify(favorites));
+  handleFavoriteChange(); // 如果在收藏页面,则重新渲染
+}
+
+// 修改进度更新函数
+function updateLoadingProgress(current, total, fromCache) {
+  const loadingMask = document.querySelector('.loading-mask');
+  if (!loadingMask) return;
+
+  // 确保进度条容器存在
+  let progressContainer = loadingMask.querySelector('.progress-container');
+  if (!progressContainer) {
+    loadingMask.innerHTML += `
+      <div class="progress-container">
+        <div class="progress-text">${i18n[currentLang].loading.initializing}</div>
+        <div class="progress-bar">
+          <div class="progress-fill"></div>
+        </div>
+        <div class="progress-detail">
+          <span class="progress-numbers">0/${total}</span>
+          <span class="cache-status"></span>
+        </div>
+        <div class="progress-tip">${i18n[currentLang].loading.tip}</div>
+      </div>
+    `;
+    progressContainer = loadingMask.querySelector('.progress-container');
+  }
+
+  // 更新进度
+  const percentage = (current / total) * 100;
+  const progressFill = progressContainer.querySelector('.progress-fill');
+  const progressNumbers = progressContainer.querySelector('.progress-numbers');
+  const cacheStatus = progressContainer.querySelector('.cache-status');
+  const progressText = progressContainer.querySelector('.progress-text');
+
+  progressFill.style.width = `${percentage}%`;
+  progressNumbers.textContent = `${current}/${total}`;
+  cacheStatus.textContent = fromCache ?
+    i18n[currentLang].loading.fromCache :
+    i18n[currentLang].loading.caching;
+
+  // 当加载完成时
+  if (current === total) {
+    localStorage.setItem('hasLoaded', 'true');
+    isFirstLoad = false;
+
+    // 更新加载文本
+    progressText.textContent = i18n[currentLang].loading.building;
+
+    // 先等待加载圈自然消失
+    const spinner = loadingMask.querySelector('.loading-spinner');
+    if (spinner) {
+      spinner.addEventListener('transitionend', () => {
+        // 加载圈消失后，再移除整个加载遮罩
+        setTimeout(() => {
+          loadingMask.classList.remove('visible');
+          setTimeout(() => loadingMask.remove(), 300);
+        }, 200);
+      }, { once: true });
+    }
+  }
+}

@@ -7,6 +7,7 @@ const STATIC_ASSETS = [
   '/i18n.js',
   '/manifest.json',
   '/modules/photoswipe.min.js',
+  '/modules/photoswipe-lightbox.min.js',
   '/modules/photoswipe.min.css',
 ];
 
