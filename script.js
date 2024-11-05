@@ -695,14 +695,52 @@ function displayImages(period) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  loadData();
+  // 先加载数据
+  loadData().then(() => {
+    // 获取URL参数中的period
+    const urlParams = new URLSearchParams(window.location.search);
+    const periodFromUrl = urlParams.get('period') || 'all';
 
-  const buttons = document.querySelectorAll('.period-btn');
-  buttons.forEach(button => {
-    button.addEventListener('click', () => {
-      buttons.forEach(btn => btn.classList.remove('active'));
-      button.classList.add('active');
-      displayImages(button.dataset.period);
+    const buttons = document.querySelectorAll('.period-btn');
+    buttons.forEach(button => {
+      // 移除可能存在的旧事件监听器
+      button.replaceWith(button.cloneNode(true));
+    });
+
+    // 重新获取按钮并添加事件监听
+    document.querySelectorAll('.period-btn').forEach(button => {
+      button.addEventListener('click', () => {
+        const period = button.dataset.period;
+
+        // 更新URL参数
+        const newUrl = new URL(window.location);
+        newUrl.searchParams.set('period', period);
+        window.history.pushState({}, '', newUrl);
+
+        // 更新按钮状态和显示
+        document.querySelectorAll('.period-btn').forEach(btn => {
+          btn.classList.remove('active');
+        });
+        button.classList.add('active');
+        displayImages(period);
+      });
+
+      // 根据URL参数设置初始active状态
+      if (button.dataset.period === periodFromUrl) {
+        button.classList.add('active');
+        displayImages(periodFromUrl);
+      }
+    });
+
+    // 处理浏览器前进后退
+    window.addEventListener('popstate', () => {
+      const params = new URLSearchParams(window.location.search);
+      const period = params.get('period') || 'all';
+
+      document.querySelectorAll('.period-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.period === period);
+      });
+      displayImages(period);
     });
   });
 
