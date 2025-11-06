@@ -135,7 +135,8 @@ function displayImages(period) {
     Object.entries(articles[period]).forEach(([title, path]) => {
       images.push({ title, path, period });
     });
-    description.textContent = descriptions[period];
+    const i18nPeriodDesc = (i18n[currentLang] && i18n[currentLang].periodDesc && i18n[currentLang].periodDesc[period]) || null;
+    description.textContent = i18nPeriodDesc || descriptions[period] || '';
     description.classList.add('visible');
   }
 
@@ -570,13 +571,15 @@ function displayImages(period) {
 
           // 异步设置图片内容
           createImageElement().then(({ html, blob }) => {
+            // 标题展示逻辑：若名称以 "Jimbo " 或 "Jimdo " 开头，则标题栏名称置空
+            const displayTitle = (/^Jimbo\s/i.test(image.title) || /^Jimdo\s/i.test(image.title)) ? '' : image.title;
             // 先设置基本的HTML结构
             item.innerHTML = `
               <div class="image-container" style="width: 100%; height: 100%;">
                 ${html}
               </div>
               <div class="title-container">
-                <div class="title">${image.title}</div>
+                <div class="title">${displayTitle}</div>
                 <button class="favorite-btn ${isFavorite ? 'active' : ''}" data-path="${image.path}">
                   <svg viewBox="0 0 24 24">
                     <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
